@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Portfolio{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Paper Trading Portfolio</h1>
+    <span class="muted" style="font-size:0.85rem;">Virtual trades &mdash; no real money</span>
+</div>
+
+<div id="portfolioLoading" class="loading" style="padding:3rem;">
+    <div class="spinner"></div>
+    <div style="margin-top:0.5rem;">Loading portfolio...</div>
+</div>
+
+<div id="portfolioContent" style="display:none;">
+
+    <!-- Summary metrics -->
+    <div class="metric-row" id="summaryMetrics"></div>
+
+    <!-- Open Trades -->
+    <div class="card" style="margin-bottom:1rem;">
+        <div class="card-header">
+            <h2>Open Positions</h2>
+            <span class="badge bg-yellow" id="openCount">0</span>
+        </div>
+        <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Type</th>
+                        <th style="text-align:right">Entry Price</th>
+                        <th style="text-align:right">Qty</th>
+                        <th style="text-align:right">Stop Loss</th>
+                        <th style="text-align:right">Target</th>
+                        <th>Reason</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody id="openTradesBody">
+                    <tr><td colspan="8" class="muted">No open positions</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Trade History -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Trade History</h2>
+            <span class="muted" style="font-size:0.8rem;">Last 30 trades</span>
+        </div>
+        <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Type</th>
+                        <th style="text-align:right">Entry</th>
+                        <th style="text-align:right">Exit</th>
+                        <th style="text-align:right">P&amp;L</th>
+                        <th style="text-align:right">P&amp;L %</th>
+                        <th>Exit Reason</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody">
+                    <tr><td colspan="8" class="muted">No trade history</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function loadPortfolio() {
+    fetchJSON('/api/portfolio', function(data) {
+        document.getElementById('portfolioLoading').style.display = 'none';
+        document.getElementById('portfolioContent').style.display = 'block';
+
+        // Summary
+        var s = data.summary || {};
+        var capital = s.current_capital || s.capital || 100000;
+        var totalPnl = s.total_pnl || 0;
+        var winRate = s.win_rate || 0;
+        var totalTrades = s.total_trades || 0;
+        var pnlCls = totalPnl >= 0 ? 'green' : 'red';
+
+        var mHTML = '';
+        mHTML += '<div class="metric"><div class="label">Capital</div><div class="value">&#8377; ' + Number(capital).toLocaleString('en-IN') + '</div></div>';
+        mHTML += '<div class="metric"><div class="label">Total P&amp;L</div><div class="value ' + pnlCls + '">&#8377; ' + Number(totalPnl).toLocaleString('en-IN', {maximumFractionDigits:2}) + '</div></div>';
+        mHTML += '<div class="metric"><div class="label">Win Rate</div><div class="value">' + Number(winRate).toFixed(1) + '%</div></div>';
+        mHTML += '<div class="metric"><div class="label">Total Trades</div><div class="value">' + totalTrades + '</div></div>';
+        document.getElementById('summaryMetrics').innerHTML = mHTML;
+
+        // Open trades
+        var open = data.open_trades || [];
+        document.getElementById('openCount').textContent = open.length;
+        if (open.length > 0) {
+            var oHTML = '';
+            for (var i = 0; i < open.length; i++) {
+                var t = open[i];
+                var sym = (t.symbol || t[1] || '').replace('.NS', '');
+                var entryPrice = t.entry_price || t[3] || 0;
+                var qty = t.quantity || t[4] || 0;
+                var sl = t.stop_loss || t[5] || '--';
+                var tgt = t.target || t[6] || '--';
+                var ttype = t.trade_type || t[7] || '--';
+                var reason = t.reason || t[8] || '';
+                var dt = t.entry_date || t[2] || '';
+                oHTML += '<tr>'
+                    + '<td><a href="/stock/' + sym + '">' + sym + '</a></td>'
+                    + '<td>' + ttype + '</td>'
+                    + '<td style="text-align:right">&#8377;' + Number(entryPrice).toLocaleString('en-IN', {maximumFractionDigits:2}) + '</td>'
+                    + '<td style="text-align:right">' + qty + '</td>'
+                    + '<td style="text-align:right">' + (sl !== '--' ? '&#8377;' + Number(sl).toFixed(2) : '--') + '</td>'
+                    + '<td style="text-align:right">' + (tgt !== '--' ? '&#8377;' + Number(tgt).toFixed(2) : '--') + '</td>'
+                    + '<td>' + reason + '</td>'
+                    + '<td class="muted">' + dt + '</td>'
+                    + '</tr>';
+            }
+            document.getElementById('openTradesBody').innerHTML = oHTML;
+        }
+
+        // History
+        var hist = data.history || [];
+        if (hist.length > 0) {
+            var hHTML = '';
+            for (var i = 0; i < hist.length; i++) {
+                var t = hist[i];
+                var sym = (t.symbol || t[1] || '').replace('.NS', '');
+                var entry = t.entry_price || t[3] || 0;
+                var exit = t.exit_price || t[9] || 0;
+                var pnl = t.pnl || t[11] || 0;
+                var pnlPct = 0;
+                if (entry && entry > 0) {
+                    pnlPct = ((exit - entry) / entry * 100);
+                }
+                var cls = pnl >= 0 ? 'green' : 'red';
+                var ttype = t.trade_type || t[7] || '--';
+                var exitReason = t.exit_reason || t[10] || '';
+                var dt = t.exit_date || t[9] || t.entry_date || t[2] || '';
+                hHTML += '<tr>'
+                    + '<td><a href="/stock/' + sym + '">' + sym + '</a></td>'
+                    + '<td>' + ttype + '</td>'
+                    + '<td style="text-align:right">&#8377;' + Number(entry).toFixed(2) + '</td>'
+                    + '<td style="text-align:right">&#8377;' + Number(exit).toFixed(2) + '</td>'
+                    + '<td style="text-align:right" class="' + cls + '">&#8377;' + Number(pnl).toFixed(2) + '</td>'
+                    + '<td style="text-align:right" class="' + cls + '">' + pnlPct.toFixed(2) + '%</td>'
+                    + '<td>' + exitReason + '</td>'
+                    + '<td class="muted">' + dt + '</td>'
+                    + '</tr>';
+            }
+            document.getElementById('historyBody').innerHTML = hHTML;
+        }
+
+    }, function(err) {
+        document.getElementById('portfolioLoading').innerHTML = '<div class="red">Error: ' + err + '</div>';
+    });
+}
+
+loadPortfolio();
+</script>
+{% endblock %}

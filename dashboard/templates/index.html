@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block extra_head %}
+<meta http-equiv="refresh" content="60">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Market Overview</h1>
+    <div>
+        <span class="timestamp" id="lastUpdate">Loading...</span>
+        <input type="text" class="search-box" id="stockSearch" placeholder="Search stock (e.g. RELIANCE)" onkeydown="if(event.key==='Enter'){goToStock();}">
+    </div>
+</div>
+
+<!-- Indices -->
+<div id="indicesRow" class="grid grid-5" style="margin-bottom:1rem;">
+    <div class="index-card loading"><div class="spinner"></div></div>
+</div>
+
+<!-- Main grid -->
+<div class="grid grid-2" style="margin-bottom:1rem;">
+    <!-- Top Gainers -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Top Gainers</h2>
+            <span class="badge bg-green">Bullish</span>
+        </div>
+        <table>
+            <thead><tr><th>Symbol</th><th style="text-align:right">Change %</th></tr></thead>
+            <tbody id="gainersBody"><tr><td colspan="2" class="loading"><div class="spinner"></div></td></tr></tbody>
+        </table>
+    </div>
+    <!-- Top Losers -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Top Losers</h2>
+            <span class="badge bg-red">Bearish</span>
+        </div>
+        <table>
+            <thead><tr><th>Symbol</th><th style="text-align:right">Change %</th></tr></thead>
+            <tbody id="losersBody"><tr><td colspan="2" class="loading"><div class="spinner"></div></td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Sector Heatmap -->
+<div class="card">
+    <div class="card-header">
+        <h2>Sector Heatmap</h2>
+        <span class="muted" style="font-size:0.8rem;">Daily change %</span>
+    </div>
+    <div class="heatmap-grid" id="heatmapGrid">
+        <div class="loading"><div class="spinner"></div></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function goToStock() {
+    var val = document.getElementById('stockSearch').value.trim().toUpperCase();
+    if (val) { window.location.href = '/stock/' + val; }
+}
+
+function loadDashboard() {
+    fetchJSON('/api/market', function(data) {
+        document.getElementById('lastUpdate').textContent = 'Updated: ' + data.timestamp;
+
+        // Indices
+        var indicesHTML = '';
+        for (var i = 0; i < data.indices.length; i++) {
+            var idx = data.indices[i];
+            var cls = pctClass(idx.change_pct);
+            indicesHTML += '<div class="index-card">'
+                + '<div class="name">' + idx.name + '</div>'
+                + '<div class="price">' + (idx.price ? idx.price.toLocaleString('en-IN', {maximumFractionDigits: 2}) : '--') + '</div>'
+                + '<div class="change ' + cls + '">' + pctSign(idx.change_pct) + idx.change_pct.toFixed(2) + '%</div>'
+                + '</div>';
+        }
+        document.getElementById('indicesRow').innerHTML = indicesHTML;
+
+        // Gainers
+        var gHTML = '';
+        for (var i = 0; i < data.top_gainers.length; i++) {
+            var g = data.top_gainers[i];
+            gHTML += '<tr>'
+                + '<td><a href="/stock/' + g.symbol + '">' + g.symbol + '</a></td>'
+                + '<td style="text-align:right" class="green">+' + g.change_pct.toFixed(2) + '%</td>'
+                + '</tr>';
+        }
+        document.getElementById('gainersBody').innerHTML = gHTML || '<tr><td colspan="2" class="muted">No data</td></tr>';
+
+        // Losers
+        var lHTML = '';
+        for (var i = 0; i < data.top_losers.length; i++) {
+            var l = data.top_losers[i];
+            lHTML += '<tr>'
+                + '<td><a href="/stock/' + l.symbol + '">' + l.symbol + '</a></td>'
+                + '<td style="text-align:right" class="red">' + l.change_pct.toFixed(2) + '%</td>'
+                + '</tr>';
+        }
+        document.getElementById('losersBody').innerHTML = lHTML || '<tr><td colspan="2" class="muted">No data</td></tr>';
+
+        // Heatmap
+        var hmHTML = '';
+        var sectors = Object.keys(data.sector_heatmap);
+        for (var i = 0; i < sectors.length; i++) {
+            var sector = sectors[i];
+            var pct = data.sector_heatmap[sector];
+            var bg = heatmapColor(pct);
+            hmHTML += '<div class="heatmap-cell" style="background:' + bg + ';">'
+                + '<div class="sector-name">' + sector + '</div>'
+                + '<div class="sector-pct">' + pctSign(pct) + pct.toFixed(2) + '%</div>'
+                + '</div>';
+        }
+        document.getElementById('heatmapGrid').innerHTML = hmHTML;
+
+    }, function(err) {
+        document.getElementById('lastUpdate').textContent = 'Error loading data: ' + err;
+    });
+}
+
+loadDashboard();
+</script>
+{% endblock %}

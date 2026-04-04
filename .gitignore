@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.pyc
+data/finance.db
+data/charts/
+*.egg-info/
+.DS_Store
+venv/

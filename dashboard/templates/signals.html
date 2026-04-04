@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Signals{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Today's Signals</h1>
+    <span class="timestamp" id="sigTimestamp">Loading...</span>
+</div>
+
+<div id="signalsLoading" class="loading" style="padding:3rem;">
+    <div class="spinner"></div>
+    <div style="margin-top:0.5rem;">Scanning Nifty 50 stocks for signals... this may take a minute.</div>
+</div>
+
+<div id="signalsContent" style="display:none;">
+    <!-- Signal summary counters -->
+    <div class="metric-row" id="signalSummary"></div>
+
+    <!-- Signals table -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Signal Board</h2>
+            <div>
+                <button onclick="filterSignals('all')" style="background:#2a2a4a;border:1px solid #3a3a5a;color:#ccc;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;margin-left:0.25rem;" id="btnAll">All</button>
+                <button onclick="filterSignals('buy')" style="background:transparent;border:1px solid #26a69a55;color:#26a69a;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;margin-left:0.25rem;" id="btnBuy">Buy</button>
+                <button onclick="filterSignals('sell')" style="background:transparent;border:1px solid #ef535055;color:#ef5350;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;margin-left:0.25rem;" id="btnSell">Sell</button>
+                <button onclick="filterSignals('hold')" style="background:transparent;border:1px solid #ffd54f55;color:#ffd54f;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;margin-left:0.25rem;" id="btnHold">Hold</button>
+            </div>
+        </div>
+        <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Signal</th>
+                        <th style="text-align:right">Score</th>
+                        <th>Recommendation</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="signalsBody">
+                    <tr><td colspan="5" class="muted">No signals generated yet</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+var allSignals = [];
+var currentFilter = 'all';
+
+function renderSignals(signals) {
+    if (signals.length === 0) {
+        document.getElementById('signalsBody').innerHTML = '<tr><td colspan="5" class="muted">No signals match filter</td></tr>';
+        return;
+    }
+    var html = '';
+    for (var i = 0; i < signals.length; i++) {
+        var s = signals[i];
+        var signal = (s.signal || 'HOLD').toUpperCase();
+        var confidence = s.confidence || 0;
+        var price = s.price || 0;
+        var reasons = (s.reasons || []).join('; ');
+        var rsi = s.rsi || '-';
+        var changePct = s.change_pct || 0;
+
+        var badgeCls = 'signal-hold';
+        if (signal.indexOf('BUY') >= 0) badgeCls = 'signal-buy';
+        else if (signal.indexOf('SELL') >= 0) badgeCls = 'signal-sell';
+
+        var pctCls = changePct >= 0 ? 'green' : 'red';
+
+        html += '<tr>'
+            + '<td><a href="/stock/' + s.symbol + '" style="font-weight:600;">' + s.symbol + '</a></td>'
+            + '<td><span class="signal-badge ' + badgeCls + '">' + signal + '</span></td>'
+            + '<td style="text-align:right;font-weight:700;">' + confidence + '%</td>'
+            + '<td class="' + pctCls + '">Rs.' + price.toFixed(2) + ' (' + (changePct >= 0 ? '+' : '') + changePct.toFixed(2) + '%)</td>'
+            + '<td class="muted" style="max-width:300px;font-size:0.85rem;">' + reasons + '</td>'
+            + '</tr>';
+    }
+    document.getElementById('signalsBody').innerHTML = html;
+}
+
+function filterSignals(type) {
+    currentFilter = type;
+    var filtered = [];
+    if (type === 'all') {
+        filtered = allSignals;
+    } else {
+        for (var i = 0; i < allSignals.length; i++) {
+            var sig = (allSignals[i].signal || '').toUpperCase();
+            if (type === 'buy' && sig.indexOf('BUY') >= 0) filtered.push(allSignals[i]);
+            else if (type === 'sell' && sig.indexOf('SELL') >= 0) filtered.push(allSignals[i]);
+            else if (type === 'hold' && sig === 'HOLD') filtered.push(allSignals[i]);
+        }
+    }
+    renderSignals(filtered);
+
+    // Update button styles
+    var btns = ['btnAll', 'btnBuy', 'btnSell', 'btnHold'];
+    for (var i = 0; i < btns.length; i++) {
+        var b = document.getElementById(btns[i]);
+        if (b) b.style.background = 'transparent';
+    }
+    var activeId = 'btn' + type.charAt(0).toUpperCase() + type.slice(1);
+    var activeBtn = document.getElementById(activeId);
+    if (activeBtn) activeBtn.style.background = '#2a2a4a';
+}
+
+function loadSignals() {
+    fetchJSON('/api/signals', function(data) {
+        document.getElementById('signalsLoading').style.display = 'none';
+        document.getElementById('signalsContent').style.display = 'block';
+        document.getElementById('sigTimestamp').textContent = 'Updated: ' + data.timestamp;
+
+        allSignals = data.signals || [];
+
+        // Count by type
+        var buyCount = 0, sellCount = 0, holdCount = 0;
+        for (var i = 0; i < allSignals.length; i++) {
+            var sig = (allSignals[i].signal || '').toUpperCase();
+            if (sig.indexOf('BUY') >= 0) buyCount++;
+            else if (sig.indexOf('SELL') >= 0) sellCount++;
+            else holdCount++;
+        }
+
+        var sumHTML = '';
+        sumHTML += '<div class="metric"><div class="label">Total Scanned</div><div class="value">' + allSignals.length + '</div></div>';
+        sumHTML += '<div class="metric"><div class="label">Buy Signals</div><div class="value green">' + buyCount + '</div></div>';
+        sumHTML += '<div class="metric"><div class="label">Sell Signals</div><div class="value red">' + sellCount + '</div></div>';
+        sumHTML += '<div class="metric"><div class="label">Hold / Neutral</div><div class="value yellow">' + holdCount + '</div></div>';
+        document.getElementById('signalSummary').innerHTML = sumHTML;
+
+        renderSignals(allSignals);
+
+    }, function(err) {
+        document.getElementById('signalsLoading').innerHTML = '<div class="red">Error loading signals: ' + err + '</div>';
+    });
+}
+
+loadSignals();
+</script>
+{% endblock %}

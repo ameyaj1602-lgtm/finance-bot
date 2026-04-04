@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Learn{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Learning Curriculum</h1>
+    <span class="muted" style="font-size:0.85rem;">30-day journey from zero to confident investor</span>
+</div>
+
+<div class="grid grid-3">
+    {% for day, topic in topics %}
+    <a href="/learn/{{ day }}" class="lesson-card">
+        <div class="day">Day {{ day }}</div>
+        <div class="topic">{{ topic }}</div>
+    </a>
+    {% endfor %}
+</div>
+
+{% if not topics %}
+<div class="card" style="text-align:center;padding:3rem;">
+    <div class="muted">No lessons available yet.</div>
+</div>
+{% endif %}
+{% endblock %}

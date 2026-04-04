@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Day {{ day }} Lesson{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>
+        <span class="muted" style="font-size:1rem;">Day {{ day }}:</span>
+        {% if lesson %}{{ lesson.topic }}{% else %}Lesson Not Found{% endif %}
+    </h1>
+    <a href="/learn" style="font-size:0.9rem;">&larr; All Lessons</a>
+</div>
+
+{% if lesson %}
+<div class="lesson-content">{{ lesson.lesson }}</div>
+
+<div style="display:flex;justify-content:space-between;margin-top:1.5rem;flex-wrap:wrap;gap:0.5rem;">
+    {% if day > 1 %}
+    <a href="/learn/{{ day - 1 }}" style="background:#1a1a2e;border:1px solid #2a2a4a;padding:0.6rem 1.2rem;border-radius:6px;color:#ccc;font-size:0.9rem;">&larr; Day {{ day - 1 }}</a>
+    {% else %}
+    <span></span>
+    {% endif %}
+
+    {% set next_exists = false %}
+    {% for d, t in topics %}
+        {% if d == day + 1 %}
+            {% set next_exists = true %}
+        {% endif %}
+    {% endfor %}
+    {% if topics|length > day %}
+    <a href="/learn/{{ day + 1 }}" style="background:#26a69a22;border:1px solid #26a69a55;padding:0.6rem 1.2rem;border-radius:6px;color:#26a69a;font-size:0.9rem;">Day {{ day + 1 }} &rarr;</a>
+    {% endif %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:3rem;">
+    <div class="red" style="font-size:1.1rem;">Lesson {{ day }} not found.</div>
+    <div class="muted" style="margin-top:0.5rem;">We have lessons for Days 1 through 30.</div>
+    <a href="/learn" style="display:inline-block;margin-top:1rem;padding:0.5rem 1rem;background:#26a69a22;border:1px solid #26a69a55;border-radius:6px;color:#26a69a;">Browse All Lessons</a>
+</div>
+{% endif %}
+{% endblock %}

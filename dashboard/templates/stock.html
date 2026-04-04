@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}{{ display_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>
+        <span class="muted" style="font-size:1rem;">NSE:</span> {{ display_name }}
+        <span id="stockPrice" style="margin-left:1rem;font-size:1.3rem;"></span>
+    </h1>
+    <a href="/" style="font-size:0.9rem;">&larr; Back to Dashboard</a>
+</div>
+
+<div id="stockLoading" class="loading" style="padding:4rem;">
+    <div class="spinner"></div>
+    <div style="margin-top:0.5rem;">Analysing {{ display_name }}...</div>
+</div>
+
+<div id="stockContent" style="display:none;">
+
+    <!-- Company info bar -->
+    <div class="metric-row" id="infoMetrics"></div>
+
+    <div class="grid grid-2" style="margin-bottom:1rem;">
+        <!-- Technical Analysis -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Technical Analysis</h2>
+                <span id="techSignalBadge" class="signal-badge signal-hold">--</span>
+            </div>
+            <div id="techIndicators"></div>
+            <div id="techSignals" style="margin-top:1rem;"></div>
+        </div>
+
+        <!-- Fundamental Analysis -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Fundamental Analysis</h2>
+                <span id="fundGradeBadge" class="signal-badge signal-hold">--</span>
+            </div>
+            <div id="fundMetrics"></div>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="card" id="summaryCard" style="display:none;">
+        <div class="card-header"><h2>Analysis Summary</h2></div>
+        <div id="summaryContent" style="line-height:1.7;"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+var symbol = "{{ symbol }}";
+
+function renderIndicator(name, value, thresholds) {
+    if (value === null || value === undefined) return '';
+    var display = typeof value === 'number' ? value.toFixed(2) : value;
+    var cls = '';
+    if (thresholds) {
+        if (thresholds.green && value >= thresholds.green) cls = 'green';
+        else if (thresholds.red && value <= thresholds.red) cls = 'red';
+        else cls = 'yellow';
+    }
+    return '<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid #1e1e38;">'
+        + '<span class="muted">' + name + '</span>'
+        + '<span class="' + cls + '">' + display + '</span>'
+        + '</div>';
+}
+
+function loadStock() {
+    fetchJSON('/api/stock/' + symbol, function(data) {
+        document.getElementById('stockLoading').style.display = 'none';
+        document.getElementById('stockContent').style.display = 'block';
+
+        // Price
+        var priceEl = document.getElementById('stockPrice');
+        if (data.price) {
+            priceEl.innerHTML = '<span style="color:#fff;">&#8377; ' + data.price.toLocaleString('en-IN', {maximumFractionDigits:2}) + '</span>';
+        }
+
+        // Info metrics
+        var info = data.info || {};
+        var im = '';
+        im += '<div class="metric"><div class="label">Company</div><div class="value" style="font-size:0.95rem;">' + (info.name || data.display_name) + '</div></div>';
+        im += '<div class="metric"><div class="label">Sector</div><div class="value" style="font-size:0.95rem;">' + (info.sector || '--') + '</div></div>';
+        im += '<div class="metric"><div class="label">Market Cap</div><div class="value">' + formatLargeNum(info.market_cap) + '</div></div>';
+        im += '<div class="metric"><div class="label">P/E Ratio</div><div class="value">' + (info.pe_ratio ? info.pe_ratio.toFixed(2) : '--') + '</div></div>';
+        im += '<div class="metric"><div class="label">P/B Ratio</div><div class="value">' + (info.pb_ratio ? info.pb_ratio.toFixed(2) : '--') + '</div></div>';
+        im += '<div class="metric"><div class="label">52W High</div><div class="value green">' + (info['52w_high'] ? ('&#8377;' + info['52w_high'].toLocaleString('en-IN')) : '--') + '</div></div>';
+        im += '<div class="metric"><div class="label">52W Low</div><div class="value red">' + (info['52w_low'] ? ('&#8377;' + info['52w_low'].toLocaleString('en-IN')) : '--') + '</div></div>';
+        document.getElementById('infoMetrics').innerHTML = im;
+
+        // Technical
+        var tech = data.technical;
+        if (tech) {
+            // Signal badge
+            var summary = tech.summary || {};
+            var signal = summary.signal || 'HOLD';
+            var badge = document.getElementById('techSignalBadge');
+            badge.textContent = signal;
+            if (signal === 'BUY' || signal === 'STRONG BUY') {
+                badge.className = 'signal-badge signal-buy';
+            } else if (signal === 'SELL' || signal === 'STRONG SELL') {
+                badge.className = 'signal-badge signal-sell';
+            } else {
+                badge.className = 'signal-badge signal-hold';
+            }
+
+            // Indicators
+            var ind = tech.indicators || {};
+            var iHTML = '';
+            iHTML += renderIndicator('RSI (14)', ind.rsi, {green: 50, red: 30});
+            iHTML += renderIndicator('MACD', ind.macd, null);
+            iHTML += renderIndicator('MACD Signal', ind.macd_signal, null);
+            iHTML += renderIndicator('EMA 9', ind.ema_9, null);
+            iHTML += renderIndicator('EMA 21', ind.ema_21, null);
+            iHTML += renderIndicator('EMA 50', ind.ema_50, null);
+            iHTML += renderIndicator('EMA 200', ind.ema_200, null);
+            iHTML += renderIndicator('Bollinger Upper', ind.bb_upper, null);
+            iHTML += renderIndicator('Bollinger Lower', ind.bb_lower, null);
+            iHTML += renderIndicator('ADX', ind.adx, {green: 25, red: 15});
+            iHTML += renderIndicator('ATR', ind.atr, null);
+            document.getElementById('techIndicators').innerHTML = iHTML;
+
+            // Signals list
+            var signals = tech.signals || {};
+            var sigKeys = Object.keys(signals);
+            if (sigKeys.length > 0) {
+                var sHTML = '<div style="font-size:0.85rem;color:#888;margin-bottom:0.5rem;">SIGNAL DETAILS</div>';
+                for (var i = 0; i < sigKeys.length; i++) {
+                    var k = sigKeys[i];
+                    var v = signals[k];
+                    var sCls = 'yellow';
+                    var label = v;
+                    if (typeof v === 'string') {
+                        if (v.toLowerCase().indexOf('buy') >= 0 || v.toLowerCase().indexOf('bullish') >= 0) sCls = 'green';
+                        else if (v.toLowerCase().indexOf('sell') >= 0 || v.toLowerCase().indexOf('bearish') >= 0) sCls = 'red';
+                    }
+                    sHTML += '<div style="display:flex;justify-content:space-between;padding:0.3rem 0;border-bottom:1px solid #1e1e38;">'
+                        + '<span class="muted">' + k.replace(/_/g, ' ') + '</span>'
+                        + '<span class="' + sCls + '">' + label + '</span></div>';
+                }
+                document.getElementById('techSignals').innerHTML = sHTML;
+            }
+
+            // Summary card
+            if (summary.explanation || summary.recommendation) {
+                document.getElementById('summaryCard').style.display = 'block';
+                var sumHTML = '';
+                if (summary.recommendation) {
+                    sumHTML += '<p style="margin-bottom:0.75rem;font-size:1.05rem;font-weight:600;">' + summary.recommendation + '</p>';
+                }
+                if (summary.explanation) {
+                    sumHTML += '<p class="muted">' + summary.explanation + '</p>';
+                }
+                if (summary.score !== undefined) {
+                    var scoreCls = summary.score >= 0 ? 'green' : 'red';
+                    sumHTML += '<p style="margin-top:0.75rem;">Signal Score: <span class="' + scoreCls + '" style="font-size:1.2rem;font-weight:700;">' + summary.score + '</span></p>';
+                }
+                document.getElementById('summaryContent').innerHTML = sumHTML;
+            }
+        } else {
+            document.getElementById('techIndicators').innerHTML = '<div class="muted" style="padding:1rem;">Insufficient data for technical analysis (need 50+ candles).</div>';
+        }
+
+        // Fundamental
+        var fund = data.fundamental;
+        if (fund) {
+            var grade = fund.grade || '--';
+            var fb = document.getElementById('fundGradeBadge');
+            fb.textContent = 'Grade: ' + grade;
+            if (grade === 'A' || grade === 'A+') {
+                fb.className = 'signal-badge signal-buy';
+            } else if (grade === 'D' || grade === 'F') {
+                fb.className = 'signal-badge signal-sell';
+            } else {
+                fb.className = 'signal-badge signal-hold';
+            }
+
+            var fHTML = '';
+            var metrics = fund.metrics || fund;
+            var metricKeys = ['pe_verdict', 'pb_verdict', 'roe_verdict', 'debt_verdict', 'dividend_verdict', 'growth_verdict'];
+            for (var i = 0; i < metricKeys.length; i++) {
+                var mk = metricKeys[i];
+                if (metrics[mk]) {
+                    var mCls = 'yellow';
+                    var mv = metrics[mk];
+                    if (typeof mv === 'string') {
+                        if (mv.toLowerCase().indexOf('good') >= 0 || mv.toLowerCase().indexOf('strong') >= 0 || mv.toLowerCase().indexOf('healthy') >= 0) mCls = 'green';
+                        else if (mv.toLowerCase().indexOf('expensive') >= 0 || mv.toLowerCase().indexOf('weak') >= 0 || mv.toLowerCase().indexOf('high') >= 0) mCls = 'red';
+                    }
+                    fHTML += '<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid #1e1e38;">'
+                        + '<span class="muted">' + mk.replace(/_/g, ' ').replace('verdict', '').trim() + '</span>'
+                        + '<span class="' + mCls + '">' + mv + '</span></div>';
+                }
+            }
+            if (fund.summary) {
+                fHTML += '<div style="margin-top:1rem;padding:0.75rem;background:#0f0f1a;border-radius:6px;font-size:0.9rem;line-height:1.6;">' + fund.summary + '</div>';
+            }
+            document.getElementById('fundMetrics').innerHTML = fHTML || '<div class="muted" style="padding:1rem;">No fundamental data available.</div>';
+        } else {
+            document.getElementById('fundMetrics').innerHTML = '<div class="muted" style="padding:1rem;">Fundamental data unavailable for this stock.</div>';
+        }
+
+    }, function(err) {
+        document.getElementById('stockLoading').innerHTML = '<div class="red">Error loading stock data: ' + err + '</div>';
+    });
+}
+
+loadStock();
+</script>
+{% endblock %}

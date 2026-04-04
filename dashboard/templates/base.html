@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Finance Bot{% endblock %} | Indian Market Dashboard</title>
+    <style>
+        /* ===== RESET & BASE ===== */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { font-size: 14px; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        a { color: #5c9ce6; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* ===== NAV ===== */
+        .navbar {
+            background: #1a1a2e;
+            border-bottom: 1px solid #2a2a4a;
+            padding: 0 1.5rem;
+            display: flex;
+            align-items: center;
+            height: 52px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .navbar .brand {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #26a69a;
+            margin-right: 2rem;
+            white-space: nowrap;
+        }
+        .navbar .brand span { color: #ef5350; }
+        .nav-links { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+        .nav-links a {
+            color: #aaa;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: background 0.15s, color 0.15s;
+        }
+        .nav-links a:hover, .nav-links a.active {
+            background: #26a69a22;
+            color: #26a69a;
+            text-decoration: none;
+        }
+        .nav-toggle {
+            display: none;
+            background: none;
+            border: 1px solid #555;
+            color: #ccc;
+            padding: 0.4rem 0.6rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            margin-left: auto;
+        }
+
+        /* ===== LAYOUT ===== */
+        .container { max-width: 1400px; margin: 0 auto; padding: 1.25rem; }
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .page-header h1 { font-size: 1.5rem; font-weight: 600; }
+        .page-header .timestamp { color: #888; font-size: 0.85rem; }
+
+        /* ===== GRID ===== */
+        .grid { display: grid; gap: 1rem; }
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+        .grid-5 { grid-template-columns: repeat(5, 1fr); }
+
+        /* ===== CARDS ===== */
+        .card {
+            background: #1a1a2e;
+            border: 1px solid #2a2a4a;
+            border-radius: 10px;
+            padding: 1.25rem;
+            transition: border-color 0.2s;
+        }
+        .card:hover { border-color: #3a3a5a; }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .card-header h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #ccc;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .card-header .badge {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        /* ===== INDEX CARDS ===== */
+        .index-card {
+            background: #16213e;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+        .index-card .name { font-size: 0.8rem; color: #999; margin-bottom: 0.3rem; text-transform: uppercase; }
+        .index-card .price { font-size: 1.4rem; font-weight: 700; }
+        .index-card .change { font-size: 0.9rem; font-weight: 600; margin-top: 0.2rem; }
+
+        /* ===== TABLE ===== */
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left;
+            padding: 0.6rem 0.75rem;
+            font-size: 0.75rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        td {
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid #1e1e38;
+            font-size: 0.9rem;
+        }
+        tr:hover td { background: #16213e44; }
+
+        /* ===== COLORS ===== */
+        .green, .bullish { color: #26a69a; }
+        .red, .bearish { color: #ef5350; }
+        .yellow { color: #ffd54f; }
+        .muted { color: #888; }
+        .bg-green { background: #26a69a22; color: #26a69a; }
+        .bg-red { background: #ef535022; color: #ef5350; }
+        .bg-yellow { background: #ffd54f22; color: #ffd54f; }
+
+        /* ===== HEATMAP ===== */
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 0.5rem;
+        }
+        .heatmap-cell {
+            padding: 0.75rem 0.5rem;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+        .heatmap-cell .sector-name { font-size: 0.7rem; color: rgba(255,255,255,0.8); margin-bottom: 0.2rem; }
+        .heatmap-cell .sector-pct { font-size: 1rem; }
+
+        /* ===== SIGNALS ===== */
+        .signal-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .signal-buy { background: #26a69a33; color: #26a69a; border: 1px solid #26a69a55; }
+        .signal-sell { background: #ef535033; color: #ef5350; border: 1px solid #ef535055; }
+        .signal-hold { background: #ffd54f33; color: #ffd54f; border: 1px solid #ffd54f55; }
+
+        /* ===== METRIC ROW ===== */
+        .metric-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; }
+        .metric {
+            background: #16213e;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            flex: 1;
+            min-width: 140px;
+        }
+        .metric .label { font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 0.25rem; }
+        .metric .value { font-size: 1.2rem; font-weight: 700; }
+
+        /* ===== SEARCH ===== */
+        .search-box {
+            background: #16213e;
+            border: 1px solid #2a2a4a;
+            color: #e0e0e0;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            width: 240px;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        .search-box:focus { border-color: #26a69a; }
+
+        /* ===== LESSON CARD ===== */
+        .lesson-card {
+            background: #16213e;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: border-color 0.2s, transform 0.1s;
+        }
+        .lesson-card:hover { border-color: #26a69a; transform: translateY(-2px); text-decoration: none; }
+        .lesson-card .day { font-size: 0.7rem; color: #26a69a; font-weight: 700; text-transform: uppercase; }
+        .lesson-card .topic { font-size: 0.95rem; margin-top: 0.3rem; color: #ddd; }
+
+        .lesson-content {
+            background: #16213e;
+            border: 1px solid #2a2a4a;
+            border-radius: 10px;
+            padding: 1.5rem;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            font-size: 0.95rem;
+        }
+
+        /* ===== LOADING ===== */
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #888;
+        }
+        .spinner {
+            display: inline-block;
+            width: 32px; height: 32px;
+            border: 3px solid #2a2a4a;
+            border-top-color: #26a69a;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 0.5rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ===== FOOTER ===== */
+        .footer {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: #555;
+            font-size: 0.8rem;
+            border-top: 1px solid #1e1e38;
+            margin-top: 2rem;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 1024px) {
+            .grid-4, .grid-5 { grid-template-columns: repeat(2, 1fr); }
+            .grid-3 { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 768px) {
+            html { font-size: 13px; }
+            .container { padding: 0.75rem; }
+            .grid-2, .grid-3, .grid-4, .grid-5 { grid-template-columns: 1fr; }
+            .nav-links { display: none; flex-direction: column; position: absolute; top: 52px; left: 0; right: 0; background: #1a1a2e; padding: 0.5rem; border-bottom: 1px solid #2a2a4a; }
+            .nav-links.open { display: flex; }
+            .nav-toggle { display: block; }
+            .page-header { flex-direction: column; align-items: flex-start; }
+            .search-box { width: 100%; }
+            .metric { min-width: 100px; }
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="brand">NSE<span>Bot</span></div>
+        <div class="nav-links" id="navLinks">
+            <a href="/" {% if request.path == '/' %}class="active"{% endif %}>Dashboard</a>
+            <a href="/signals" {% if request.path == '/signals' %}class="active"{% endif %}>Signals</a>
+            <a href="/portfolio" {% if request.path == '/portfolio' %}class="active"{% endif %}>Portfolio</a>
+            <a href="/learn" {% if '/learn' in request.path %}class="active"{% endif %}>Learn</a>
+        </div>
+        <button class="nav-toggle" onclick="document.getElementById('navLinks').classList.toggle('open')">&#9776;</button>
+    </nav>
+
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+
+    <footer class="footer">
+        Finance Bot &mdash; Indian Stock Market Dashboard &mdash; Data from Yahoo Finance &mdash; For educational purposes only
+    </footer>
+
+    <script>
+        /* Utility: fetch JSON and call a callback */
+        function fetchJSON(url, callback, errorCallback) {
+            fetch(url)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) { callback(data); }
+                    else if (errorCallback) { errorCallback(data.error || 'Unknown error'); }
+                })
+                .catch(function(err) {
+                    if (errorCallback) { errorCallback(err.toString()); }
+                });
+        }
+
+        /* Color helpers */
+        function pctClass(val) { return val >= 0 ? 'green' : 'red'; }
+        function pctSign(val) { return val >= 0 ? '+' : ''; }
+        function formatLargeNum(n) {
+            if (!n || n === 0) return '--';
+            if (n >= 1e12) return (n / 1e12).toFixed(2) + 'T';
+            if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+            if (n >= 1e7) return (n / 1e7).toFixed(2) + 'Cr';
+            if (n >= 1e5) return (n / 1e5).toFixed(2) + 'L';
+            return n.toLocaleString('en-IN');
+        }
+
+        function heatmapColor(pct) {
+            if (pct >= 2) return '#1b5e20';
+            if (pct >= 1) return '#2e7d32';
+            if (pct >= 0.3) return '#388e3c';
+            if (pct >= 0) return '#26a69a44';
+            if (pct >= -0.3) return '#ef535033';
+            if (pct >= -1) return '#c62828';
+            return '#b71c1c';
+        }
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
