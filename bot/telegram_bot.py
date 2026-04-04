@@ -18,6 +18,7 @@ from trading.paper_trader import PaperTrader
 from education.lessons import get_lesson, get_all_topics
 from analysis.ai_analyst import AIAnalyst
 from analysis.charts import ChartGenerator
+from analysis.predictor import MarketPredictor
 from analysis.mutual_funds import MutualFundTracker
 from analysis.news_sentiment import NewsSentimentEngine
 from analysis.backtesting import BacktestEngine
@@ -43,6 +44,7 @@ options_analyzer = OptionsAnalyzer()
 portfolio_intel = PortfolioIntelligence()
 watchlist = Watchlist()
 data_fetcher = MarketDataFetcher()
+predictor = MarketPredictor()
 
 
 async def send_long(update_or_id, text, context):
@@ -132,6 +134,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🧪 BACKTESTING:
 /backtest RELIANCE ema_crossover — Test strategy
 /strategies — List all strategies
+
+🔮 PREDICTIONS:
+/predict — Tomorrow's market prediction
+/predict RELIANCE — Stock prediction
+
+📰 FINANCE NEWS:
+/financenews — Top finance/market news
+/financenews RELIANCE — Stock-specific news
 
 💡 Type any stock name to get a quick summary!"""
 
@@ -614,6 +624,96 @@ async def strategies(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ── Free Text Handler ────────────────────────────────────────
 
+# ── Predictions ──────────────────────────────────────────────
+
+async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.args:
+        # Stock prediction
+        symbol = context.args[0].upper()
+        await update.message.reply_text("Predicting " + symbol + "... (30 sec)")
+        try:
+            pred = predictor.predict_stock(symbol)
+            report = predictor.format_stock_prediction(pred)
+            await send_long(update, report, context)
+        except Exception as e:
+            await update.message.reply_text("Error: " + str(e))
+    else:
+        # Market prediction
+        await update.message.reply_text("Analyzing market for prediction... (1-2 min)")
+        try:
+            pred = predictor.predict_market()
+            report = predictor.format_market_prediction(pred)
+
+            # Try to add AI commentary
+            ai_take = predictor.get_ai_prediction(pred)
+            if ai_take:
+                report += "\n\n🤖 AI TAKE:\n" + ai_take
+
+            await send_long(update, report, context)
+        except Exception as e:
+            await update.message.reply_text("Error: " + str(e))
+
+
+# ── Finance News ─────────────────────────────────────────────
+
+async def financenews(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Fetching finance news...")
+    try:
+        if context.args:
+            symbol = context.args[0].upper()
+            items = news_engine.get_stock_news(symbol, limit=8)
+            title = "📰 FINANCE NEWS: " + symbol
+        else:
+            # Finance-specific news
+            items = []
+            for query in ["Indian stock market today", "Nifty Sensex", "RBI economy India"]:
+                items.extend(news_engine._fetch_google_news_rss(query, 5))
+            # Deduplicate
+            seen = set()
+            unique = []
+            for n in items:
+                key = n["title"][:40].lower()
+                if key not in seen:
+                    seen.add(key)
+                    unique.append(n)
+            items = unique[:12]
+            title = "📰 FINANCE NEWS"
+
+        sentiment = news_engine.analyze_sentiment(items)
+
+        lines = [title, "━" * 32]
+
+        # Sentiment summary
+        if sentiment:
+            emoji_map = {"bullish": "🟢 BULLISH", "bearish": "🔴 BEARISH", "neutral": "⚪ NEUTRAL"}
+            lines.append("Market Mood: " + emoji_map.get(sentiment["overall"], "NEUTRAL"))
+            lines.append("")
+
+        for i, item in enumerate(items):
+            s_emoji = ""
+            if i < len(sentiment.get("details", [])):
+                s = sentiment["details"][i]["sentiment"]
+                s_emoji = "🟢 " if s == "bullish" else "🔴 " if s == "bearish" else "⚪ "
+
+            lines.append(s_emoji + item["title"])
+            if item.get("source"):
+                lines.append("  — " + item["source"])
+            if item.get("published"):
+                lines.append("  " + item["published"][:25])
+            lines.append("")
+
+        lines.append("Sentiment Score: " + str(sentiment.get("score", 0)))
+        lines.append("Bullish: " + str(sentiment.get("bullish_count", 0)) +
+                     " | Bearish: " + str(sentiment.get("bearish_count", 0)) +
+                     " | Neutral: " + str(sentiment.get("neutral_count", 0)))
+
+        await send_long(update, "\n".join(lines), context)
+    except Exception as e:
+        await update.message.reply_text("Error: " + str(e))
+
+
+# ── Free Text Handler ────────────────────────────────────────
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip().upper()
     if len(text) <= 20 and text.replace("&", "").isalpha():
@@ -689,6 +789,12 @@ def main():
     # Backtesting
     app.add_handler(CommandHandler("backtest", backtest))
     app.add_handler(CommandHandler("strategies", strategies))
+
+    # Predictions
+    app.add_handler(CommandHandler("predict", predict))
+
+    # Finance News
+    app.add_handler(CommandHandler("financenews", financenews))
 
     # Free text
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
