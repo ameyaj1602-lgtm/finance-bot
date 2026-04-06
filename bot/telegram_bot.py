@@ -19,6 +19,10 @@ from education.lessons import get_lesson, get_all_topics
 from analysis.ai_analyst import AIAnalyst
 from analysis.charts import ChartGenerator
 from analysis.predictor import MarketPredictor
+from bot.email_reports import send_morning_report
+from analysis.crypto_commodities import CryptoCommodityTracker
+from analysis.screener import StockScreener
+from analysis.goal_tax import GoalPlanner, TaxCalculator
 from analysis.mutual_funds import MutualFundTracker
 from analysis.news_sentiment import NewsSentimentEngine
 from analysis.backtesting import BacktestEngine
@@ -45,6 +49,10 @@ portfolio_intel = PortfolioIntelligence()
 watchlist = Watchlist()
 data_fetcher = MarketDataFetcher()
 predictor = MarketPredictor()
+crypto_tracker = CryptoCommodityTracker()
+screener = StockScreener()
+goal_planner = GoalPlanner()
+tax_calc = TaxCalculator()
 
 
 async def send_long(update_or_id, text, context):
@@ -142,6 +150,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📰 FINANCE NEWS:
 /financenews — Top finance/market news
 /financenews RELIANCE — Stock-specific news
+
+₿ CRYPTO & COMMODITIES:
+/crypto — Crypto prices (BTC, ETH, SOL in INR)
+/commodities — Gold, Silver, Crude prices
+/currency — USD/INR, EUR/INR rates
+
+🔍 SCREENER:
+/screen pe<25 roe>15 — Filter stocks
+/filters — See all filter options
+
+🎯 PLANNING & TAX:
+/goal 10000000 10 — SIP for Rs.1 Cr in 10 years
+/retire 25 50 50000 — Retirement plan
+/tax 100 150 10 400 — Tax calc (buy, sell, qty, days held)
+
+📧 EMAIL:
+/emailreport — Send market report to your email
 
 💡 Type any stock name to get a quick summary!"""
 
@@ -712,6 +737,139 @@ async def financenews(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Error: " + str(e))
 
 
+# ── Crypto & Commodities ─────────────────────────────────────
+
+async def crypto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Fetching crypto prices...")
+    try:
+        report = crypto_tracker.format_crypto_report()
+        await send_long(update, report, context)
+    except Exception as e:
+        await update.message.reply_text("Error: " + str(e))
+
+
+async def commodities(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Fetching commodity prices...")
+    try:
+        report = crypto_tracker.format_commodity_report()
+        await send_long(update, report, context)
+    except Exception as e:
+        await update.message.reply_text("Error: " + str(e))
+
+
+async def currency(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        report = crypto_tracker.format_currency_report()
+        await send_long(update, report, context)
+    except Exception as e:
+        await update.message.reply_text("Error: " + str(e))
+
+
+# ── Stock Screener ───────────────────────────────────────────
+
+async def screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /screen pe<25 roe>15 debt<1\n\n"
+            "Available filters: /filters")
+        return
+    filter_str = " ".join(context.args)
+    await update.message.reply_text("Screening Nifty 50 with: " + filter_str + " ... (1-2 min)")
+    try:
+        result = screener.screen(filter_str)
+        report = screener.format_screen_report(result)
+        await send_long(update, report, context)
+    except Exception as e:
+        await update.message.reply_text("Error: " + str(e))
+
+
+async def show_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lines = ["🔍 AVAILABLE SCREENER FILTERS", "━" * 30, ""]
+    for k, v in StockScreener.AVAILABLE_FILTERS.items():
+        lines.append("  " + k + " — " + v)
+    lines.append("\nExample: /screen pe<25 roe>15 debt<1")
+    await send_long(update, "\n".join(lines), context)
+
+
+# ── Goal Planner & Tax ───────────────────────────────────────
+
+async def goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "Usage: /goal <target_amount> <years> [return_%]\n\n"
+            "Examples:\n"
+            "/goal 10000000 10 — Rs.1 Cr in 10 years (12% default)\n"
+            "/goal 5000000 5 15 — Rs.50 Lakh in 5 years at 15%")
+        return
+    try:
+        target = float(context.args[0])
+        years = int(context.args[1])
+        ret = float(context.args[2]) if len(context.args) > 2 else 12
+    except ValueError:
+        await update.message.reply_text("Invalid numbers.")
+        return
+    result = goal_planner.plan_goal(target, years, ret)
+    report = goal_planner.format_goal_report(result)
+    await send_long(update, report, context)
+
+
+async def retire(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 3:
+        await update.message.reply_text(
+            "Usage: /retire <current_age> <retire_age> <monthly_expense>\n\n"
+            "Example: /retire 25 50 50000")
+        return
+    try:
+        age = int(context.args[0])
+        ret_age = int(context.args[1])
+        expense = float(context.args[2])
+    except ValueError:
+        await update.message.reply_text("Invalid numbers.")
+        return
+    result = goal_planner.retirement_plan(age, ret_age, expense)
+    report = goal_planner.format_retirement_report(result)
+    await send_long(update, report, context)
+
+
+async def tax(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 4:
+        await update.message.reply_text(
+            "Usage: /tax <buy_price> <sell_price> <quantity> <holding_days>\n\n"
+            "Examples:\n"
+            "/tax 100 150 10 400 — Bought at 100, sold at 150, 10 qty, held 400 days\n"
+            "/tax 500 450 20 30 — Loss scenario")
+        return
+    try:
+        buy = float(context.args[0])
+        sell = float(context.args[1])
+        qty = int(context.args[2])
+        days = int(context.args[3])
+    except ValueError:
+        await update.message.reply_text("Invalid numbers.")
+        return
+    result = tax_calc.calculate_equity_tax(buy, sell, qty, days)
+    report = tax_calc.format_tax_report(result)
+    await send_long(update, report, context)
+
+
+# ── Email Report ──────────────────────────────────────────────
+
+async def emailreport(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Generating and sending email report... (1-2 min)")
+    try:
+        result = send_morning_report()
+        if result:
+            await update.message.reply_text("Email report sent to ameya.j@growthx.club!")
+        else:
+            await update.message.reply_text(
+                "Email not configured yet. Add these to your .env:\n"
+                "SMTP_EMAIL=your_gmail@gmail.com\n"
+                "SMTP_PASSWORD=your_app_password\n\n"
+                "Get an App Password from myaccount.google.com/apppasswords")
+    except Exception as e:
+        await update.message.reply_text("Error: " + str(e))
+
+
 # ── Free Text Handler ────────────────────────────────────────
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -795,6 +953,23 @@ def main():
 
     # Finance News
     app.add_handler(CommandHandler("financenews", financenews))
+
+    # Crypto & Commodities
+    app.add_handler(CommandHandler("crypto", crypto))
+    app.add_handler(CommandHandler("commodities", commodities))
+    app.add_handler(CommandHandler("currency", currency))
+
+    # Screener
+    app.add_handler(CommandHandler("screen", screen))
+    app.add_handler(CommandHandler("filters", show_filters))
+
+    # Goal & Tax
+    app.add_handler(CommandHandler("goal", goal))
+    app.add_handler(CommandHandler("retire", retire))
+    app.add_handler(CommandHandler("tax", tax))
+
+    # Email Report
+    app.add_handler(CommandHandler("emailreport", emailreport))
 
     # Free text
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

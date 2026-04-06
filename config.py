@@ -14,6 +14,11 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
+# Email Reports
+RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL", "ameya.j@growthx.club")
+SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+
 # Zerodha (Phase 3)
 KITE_API_KEY = os.getenv("KITE_API_KEY", "")
 KITE_API_SECRET = os.getenv("KITE_API_SECRET", "")
